@@ -3,7 +3,7 @@
 // @namespace    http://your-namespace.com
 // @version      1.0
 // @description  Use this script to help debug what properties are being used to create a fingerprint
-// @author       BeatBroccoli
+// @author       Your Name
 // @match        *://*/*
 // @grant        unsafeWindow
 // @run-at       document-start
@@ -12,21 +12,32 @@
 (function() {
     'use strict';
 
+    let usedProps = {};
     const processedObjects = new WeakMap();
+    let logIgnore = ['performance.now', 'requestAnimationFrame', 'setTimeout', 'setInterval', 'history.replaceState'];
+    logIgnore = logIgnore.concat(['document.querySelectorAll', 'document.querySelector', 'document.createElement', 'document.getElementById', 'document.importNode']);
+    Error.stackTraceLimit = Infinity;
+
+    function getCallerFile() {
+        let stack = new Error().stack.split('\n');
+        stack = stack.filter((s) => { return s.indexOf('chrome-extension://') < 0; }).slice(1);
+        return stack.join('\n');
+    }
 
     function logProperties(obj, path = '', depth = 0, maxDepth = 30) {
 
-        console.log('Trapping', path);
+        //console.log('Trapping', path);
         if (depth >= maxDepth || processedObjects.has(obj)) return;
         processedObjects.set(obj, true);
 
         //debugger;
         for (const key in obj) {
-            console.log('Key', key);
+            //console.log('Key', key);
             if (obj[key]) {
 
                 const fullPath = path === '' ? key : `${path}.${key}`;
-                const value = obj[key];
+                let value = obj[key];
+                if(logIgnore.indexOf(fullPath) > -1) continue;
 
                 if (typeof value === 'object' && value !== null) {
                     // Recursively handle nested objects
@@ -35,7 +46,10 @@
                     try {
                         Object.defineProperty(obj, key, {
                             get: function() {
-                                console.warn(`Reading ${fullPath}`);
+                                if(!usedProps[fullPath]) usedProps[fullPath] = 0;
+                                usedProps[fullPath]++;
+                                let callerFile = getCallerFile();
+                                console.warn(`Reading ${fullPath}`); // ,'\n', callerFile
                                 return value;
                             },
                             set: function(newValue) {
@@ -52,5 +66,6 @@
     }
 
     logProperties(unsafeWindow);
+    unsafeWindow.usedProps = usedProps;
 
 })();
